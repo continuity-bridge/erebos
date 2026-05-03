@@ -80,6 +80,7 @@ class OllamaClient(ProviderClient):
     def __init__(self, base_url: str = "http://localhost:11434",
                  timeout: int = DEFAULT_TIMEOUT,
                  label: Optional[str] = None,
+                 event_bus=None,  # Add this parameter
                  **config):
         """
         Args:
@@ -87,7 +88,8 @@ class OllamaClient(ProviderClient):
             timeout  : Request timeout for chat calls in seconds
             label    : Human-readable label (used in logging and status display)
         """
-        super().__init__(**config)
+        # Pass event_bus and any other config to the base class
+        super().__init__(event_bus=event_bus, **config)
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.label = label or base_url

@@ -216,9 +216,10 @@ class ProviderClient(ABC):
                 f"got {cls.__dict__.get('provider_type')!r}"
             )
 
-    def __init__(self, **config):
-        # Optional event system integration — attached by router, not constructor
-        self.event_emitter = None
+    def __init__(self, event_bus=None, **config):
+        # NEW: Initialize the emitter with the provided bus
+        self.event_bus = event_bus
+        self.event_emitter = EventEmitter(event_bus) if event_bus else None
 
     # ---------------------------------------------------------------------------
     # Public Interface

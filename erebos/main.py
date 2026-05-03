@@ -45,6 +45,7 @@ from .providers.base import (
     ProviderCapabilityError,
 )
 from .providers.ollama import OllamaClient
+from .hooks import HookExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -239,14 +240,27 @@ def cmd_list(args):
 
 def cmd_run(args):
     """Send a prompt to the best available nodule."""
-    config = NoduleConfig(
-        Path(args.config) if args.config else DEFAULT_CONFIG_PATH
-    )
+    config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
+    config = NoduleConfig(config_path)
 
+    # Select the nodule and client (e.g., Sisyphus)
     nodule, client = _select_nodule(config, nodule_index=args.nodule)
 
-    # Build message history — single turn for now,
-    # session persistence will extend this
+    # ---------------------------------------------------------
+    # NEW: Initialize the Hook System for this session
+    # ---------------------------------------------------------
+    # These paths should point to your Substrate symlinks
+    registry_path = "erebos/config/hooks-registry.json"
+    hooks_config_path = "erebos/config/hooks-config.json"
+    
+    executor = HookExecutor(
+        event_bus=client.event_bus, # Assuming bus is attached to client
+        provider_client=client,      # Pass client to the Dispatcher
+        registry_path=registry_path,
+        config_path=hooks_config_path
+    )
+    # ---------------------------------------------------------
+
     messages = [{"role": "user", "content": args.prompt}]
 
     print(f"🚀 Routing to: {nodule['label']} ({nodule['url']})")

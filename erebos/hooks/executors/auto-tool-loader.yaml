@@ -1,0 +1,27 @@
+hook_id: auto-tool-loader
+version: 1.0.0
+description: 'Logic for recovery when predictive loading misses a family'
+
+# Execution steps for the Dispatcher
+steps:
+  - id: 1_record_failure
+    action: state_update
+    params:
+      key: 'tool_failures'
+      increment: 1
+      map: 'config.tool_family_map'
+
+  - id: 2_calculate_threshold
+    action: compute_logic
+    params:
+      velocity_window: 5
+      # High velocity (rapid failures) halves the threshold
+      high_velocity_multiplier: 0.5
+      threshold_source: 'config.tool_family_thresholds'
+
+  - id: 3_dispatch_load
+    action: tool_search
+    # Only runs if step 2 signals threshold reached
+    params:
+      query: '{family_search_terms}'
+      limit: 10
