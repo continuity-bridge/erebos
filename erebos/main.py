@@ -25,6 +25,7 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
+from xml.parsers.expat import model
 
 from .discovery import (
     NoduleConfig,
@@ -240,31 +241,24 @@ def cmd_list(args):
 
 def cmd_run(args):
     """Send a prompt to the best available nodule."""
-    config_path = Path(args.config) if args.config else DEFAULT_CONFIG_PATH
-    config = NoduleConfig(config_path)
+    config = NoduleConfig(
+        Path(args.config) if args.config else DEFAULT_CONFIG_PATH
+    )
 
-    # Select the nodule and client (e.g., Sisyphus)
     nodule, client = _select_nodule(config, nodule_index=args.nodule)
 
-    # ---------------------------------------------------------
-    # NEW: Initialize the Hook System for this session
-    # ---------------------------------------------------------
-    # These paths should point to your Substrate symlinks
-    registry_path = "erebos/config/hooks-registry.json"
-    hooks_config_path = "erebos/config/hooks-config.json"
-    
-    executor = HookExecutor(
-        event_bus=client.event_bus, # Assuming bus is attached to client
-        provider_client=client,      # Pass client to the Dispatcher
-        registry_path=registry_path,
-        config_path=hooks_config_path
-    )
-    # ---------------------------------------------------------
+    model = args.model or nodule.get("default_model")
+    if not model:
+        print(
+            f"❌ No model specified and no default_model set on {nodule['label']}.\n"
+            f"   Use --model or set a default with: erebos nodule 1 --set-default <model>"
+        )
+        sys.exit(1)
 
     messages = [{"role": "user", "content": args.prompt}]
 
     print(f"🚀 Routing to: {nodule['label']} ({nodule['url']})")
-    print(f"🤖 Model: {args.model}")
+    print(f"🤖 Model: {model}")
     print(f"📝 Prompt: {args.prompt}")
     print("-" * 80)
 
@@ -272,7 +266,7 @@ def cmd_run(args):
         if args.stream:
             print("\n💬 Response:")
             for chunk in client.chat(
-                model=args.model,
+                model=model,
                 messages=messages,
                 stream=True
             ):
@@ -280,7 +274,7 @@ def cmd_run(args):
             print()
         else:
             response = client.chat(
-                model=args.model,
+                model=model,
                 messages=messages,
                 stream=False
             )
@@ -295,22 +289,18 @@ def cmd_run(args):
         for m in nodule.get("models", []):
             print(f"   • {m}")
         sys.exit(1)
-
     except ProviderConnectionError as e:
         print(f"\n❌ Connection failed: {e}")
         print("   The nodule may have gone offline. Run 'erebos list' to check.")
         sys.exit(1)
-
     except ProviderRateLimitError as e:
         print(f"\n❌ Rate limited: {e}")
         if e.retry_after:
             print(f"   Retry after {e.retry_after}s")
         sys.exit(1)
-
     except ProviderError as e:
         print(f"\n❌ Provider error: {e}")
         sys.exit(1)
-
 
 def cmd_add(args):
     """Manually add a nodule."""
@@ -473,8 +463,8 @@ Examples:
     # run
     p = subparsers.add_parser("run", help="Send a prompt to a nodule")
     p.add_argument("prompt", help="Prompt text")
-    p.add_argument("--model", default="llama3.2",
-                   help="Model identifier (default: llama3.2)")
+    p.add_argument("--model", default=None,
+                   help="Model identifier (default: nodule's default_model)")
     p.add_argument("--nodule", type=int, metavar="N",
                    help="Nodule index to use (default: auto)")
     p.add_argument("--stream", action="store_true",
