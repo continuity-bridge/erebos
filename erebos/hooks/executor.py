@@ -54,14 +54,17 @@ class ActionDispatcher:
 
 class HookExecutor:
     def __init__(
-        self, event_bus, provider_client, registry_path: str, config_path: str
+        self, event_bus, provider_client=None,
+        registry_path: str = None, config_path: str = None,
+        on_fire=None
     ):
         self.bus = event_bus
-        self.dispatcher = ActionDispatcher(provider_client)
-        self.registry = self._load_json(registry_path)
-        self.config = self._load_json(config_path)
+        self.dispatcher = ActionDispatcher(provider_client) if provider_client else None
+        self.registry = self._load_json(registry_path) if registry_path else {}
+        self.config = self._load_json(config_path) if config_path else {}
         self.enabled_hooks = self.config.get("enabled_hooks", [])
         self.execution_log = []
+        self.on_fire = on_fire  # callable(hook_id, event_type, executor_path, success, error)
 
         self._subscribe_hooks()
 
@@ -84,26 +87,33 @@ class HookExecutor:
             return
 
         # Resolve YAML executor path (mirrors Substrate structure)
-        executor_path = Path(hook["executor"]).with_suffix(".yaml")
-        
-        if not executor_path.exists():
-            logger.error(f"Executor not found: {executor_path}")
-            return
+        raw_executor = hook.get("executor", "")
+        executor_path = Path(raw_executor).with_suffix(".yaml") if raw_executor else None
 
         try:
-            with open(executor_path, 'r') as f:
-                plan = yaml.safe_load(f)
+            if executor_path and executor_path.exists():
+                # Phase 3: parse and run YAML steps
+                with open(executor_path, 'r') as f:
+                    plan = yaml.safe_load(f)
 
-            logger.info(f"Executing hook: {hook_id}")
-            
-            # Execute the steps defined in the YAML file
-            for step in plan.get("steps", []):
-                self.dispatcher.dispatch(step["action"], step["params"], event)
+                logger.info(f"Executing hook: {hook_id}")
+                if self.dispatcher:
+                    for step in plan.get("steps", []):
+                        self.dispatcher.dispatch(step["action"], step["params"], event)
+            else:
+                # Stub: log intent, no executor file required
+                logger.info(f"[STUB] Would execute: {raw_executor or 'No executor defined'}")
 
             self._log_execution(hook_id, event, True)
+            if self.on_fire:
+                self.on_fire(hook_id, event.get("event"),
+                             str(executor_path) if executor_path else None, True, None)
         except Exception as e:
             logger.error(f"Hook {hook_id} failed: {e}")
             self._log_execution(hook_id, event, False, str(e))
+            if self.on_fire:
+                self.on_fire(hook_id, event.get("event"),
+                             str(executor_path) if executor_path else None, False, str(e))
 
     def _conditions_met(self, hook: Dict, event: Dict) -> bool:
         """
@@ -124,8 +134,14 @@ class HookExecutor:
     def _log_execution(self, hook_id, event, success, error=None):
         log_entry = {
             "timestamp": event.get("timestamp"),
+            "session_id": event.get("session_id"),
+            "event_type": event.get("event"),
             "hook_id": hook_id,
-            "success": success,
-            "error": error
+            "execution_status": "success" if success else "failed",
+            "error_message": error,
         }
         self.execution_log.append(log_entry)
+
+    def get_execution_history(self) -> list:
+        """Get execution history for this session."""
+        return self.execution_log.copy()

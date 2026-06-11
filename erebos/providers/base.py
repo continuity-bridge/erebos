@@ -355,6 +355,7 @@ class ProviderClient(ABC):
         if self.event_emitter:
             self.event_emitter.tool_succeeded(tool_name, tool_family)
 
-    def _emit_failure(self, tool_name: str, tool_family: str):
+    def _emit_failure(self, tool_name: str, tool_family: str,
+                      error_type: str = "provider_error", error_message: str = ""):
         if self.event_emitter:
-            self.event_emitter.tool_failed(tool_name, tool_family)
+            self.event_emitter.tool_failed(tool_name, tool_family, error_type, error_message)

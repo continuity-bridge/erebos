@@ -7,7 +7,7 @@ import tempfile
 import pytest
 from erebos.events.bus import EventBus
 from erebos.events.emitter import EventEmitter
-from erebos.events.hook_executor import HookExecutor
+from erebos.hooks import HookExecutor
 
 
 def test_load_registry():

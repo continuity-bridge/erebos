@@ -47,6 +47,8 @@ from .providers.base import (
 )
 from .providers.ollama import OllamaClient
 from .hooks import HookExecutor
+from .events.bus import EventBus
+from .events.emitter import EventEmitter
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +257,38 @@ def cmd_run(args):
         )
         sys.exit(1)
 
+    # ── Event system ──────────────────────────────────────────────────────────
+    bus = EventBus()
+    emitter = EventEmitter(bus)
+
+    verbose       = getattr(args, "verbose", False)
+    hooks_verbose = getattr(args, "hooks_verbose", False)
+
+    if verbose:
+        on_fire = None
+    elif hooks_verbose:
+        def on_fire(hook_id, event_type, executor_path, success, error):
+            status = "✓ success" if success else f"✗ failed: {error}"
+            print(f"  ⚡ Hook:     {hook_id}")
+            print(f"     Trigger:  {event_type}")
+            print(f"     Executor: {executor_path or 'none'}")
+            print(f"     Status:   {status}")
+    else:
+        def on_fire(hook_id, event_type, executor_path, success, error):
+            icon = "⚡" if success else "⚡✗"
+            print(f"  {icon} {hook_id} [{event_type}]")
+
+    hooks_registry    = getattr(args, "hooks_registry", None)
+    hooks_config_path = getattr(args, "hooks_config", None)
+    HookExecutor(bus, provider_client=client,
+                 registry_path=hooks_registry, config_path=hooks_config_path,
+                 on_fire=on_fire)
+
+    domain = getattr(args, "domain", "default")
+    emitter.start_session(domain=domain)
+    client.event_emitter = emitter
+    # ─────────────────────────────────────────────────────────────────────────
+
     messages = [{"role": "user", "content": args.prompt}]
 
     print(f"🚀 Routing to: {nodule['label']} ({nodule['url']})")
@@ -262,6 +296,7 @@ def cmd_run(args):
     print(f"📝 Prompt: {args.prompt}")
     print("-" * 80)
 
+    exit_code = 0
     try:
         if args.stream:
             print("\n💬 Response:")
@@ -300,7 +335,13 @@ def cmd_run(args):
         sys.exit(1)
     except ProviderError as e:
         print(f"\n❌ Provider error: {e}")
-        sys.exit(1)
+        exit_code = 1
+
+    finally:
+        emitter.end_session(trigger="run_complete")
+
+    if exit_code:
+        sys.exit(exit_code)
 
 def cmd_add(args):
     """Manually add a nodule."""
@@ -469,6 +510,14 @@ Examples:
                    help="Nodule index to use (default: auto)")
     p.add_argument("--stream", action="store_true",
                    help="Stream response chunks as they arrive")
+    p.add_argument("--domain", default="default",
+                   help="Domain for session context (default: default)")
+    p.add_argument("--hooks-registry", metavar="PATH",
+                   help="Path to hooks-registry.json (enables hook system)")
+    p.add_argument("--hooks-config", metavar="PATH",
+                   help="Path to hooks-config.json (enables hook system)")
+    p.add_argument("--hooks-verbose", action="store_true",
+                   help="Show full hook details without full debug logging")
     _add_common_args(p)
     p.set_defaults(func=cmd_run)
 
