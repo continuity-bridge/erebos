@@ -46,6 +46,7 @@ from .providers.base import (
     ProviderCapabilityError,
 )
 from .providers.ollama import OllamaClient
+from .providers.claude import ClaudeClient
 from .hooks import HookExecutor
 from .events.bus import EventBus
 from .events.emitter import EventEmitter
@@ -75,15 +76,21 @@ def _client_for_nodule(nodule: dict) -> OllamaClient:
             label=nodule.get("label"),
         )
 
+    if provider == "anthropic":
+        api_key_env = nodule.get("api_key_env", "ANTHROPIC_API_KEY")
+        return ClaudeClient(
+            api_key=os.environ.get(api_key_env),
+            max_tokens=nodule.get("max_tokens", 8192),
+            label=nodule.get("label"),
+        )
+
     # Future:
-    # if provider == "anthropic":
-    #     return ClaudeClient(api_key=os.environ[nodule["api_key_env"]])
     # if provider == "google":
     #     return GeminiClient(api_key=os.environ[nodule["api_key_env"]])
 
     raise ValueError(
         f"Unknown provider '{provider}' in nodule '{nodule.get('label')}'. "
-        f"Supported: ollama"
+        f"Supported: ollama, anthropic"
     )
 
 

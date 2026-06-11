@@ -217,9 +217,10 @@ class ProviderClient(ABC):
             )
 
     def __init__(self, event_bus=None, **config):
-        # NEW: Initialize the emitter with the provided bus
+        # Optional event system integration — attached by router, not constructor
         self.event_bus = event_bus
         self.event_emitter = EventEmitter(event_bus) if event_bus else None
+        self.token_monitor = None  # attached by router after construction
 
     # ---------------------------------------------------------------------------
     # Public Interface

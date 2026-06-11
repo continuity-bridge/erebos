@@ -12,6 +12,7 @@ from .base import (
     ProviderCapabilityError,
 )
 from .ollama import OllamaClient
+from .claude import ClaudeClient
 
 __all__ = [
     "ProviderClient",
@@ -24,4 +25,5 @@ __all__ = [
     "ProviderResponseError",
     "ProviderCapabilityError",
     "OllamaClient",
+    "ClaudeClient",
 ]
