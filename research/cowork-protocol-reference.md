@@ -39,7 +39,7 @@ Legend: ✅ confirmed live · ⚠️ partial · ❓ from research, not yet probe
 | `isGuestConnected` | ✅ | `{}` | `{"connected": bool}` | health check |
 | `subscribeEvents` | ✅ | `{}` | `{}` (ack) | **must be sent before `spawn`** to receive its output events on this connection |
 | `spawn` | ✅ | object `{"id":<str>, "command":<str>, "args":[...], "cwd":<str>, "env":{...}}` | ack `{}` then **events** (see below) | fire-and-ack: stdout/exit arrive as events, NOT on this reply |
-| `readFile` | ❌ | **UNRESOLVED** — `{path}`, `{paths:[]}`, AND `[positional]` all rejected with `paths[0] undefined`. Param plumbing differs from spawn. Brute-force probe pending. | ❓ | handler validates `paths[0]` is a string |
+| `readFile` | ✅ | `{"filePath": "<path>"}` (singular). Other keys trip a generic `paths[0]` validator = "filePath missing". | `{...content...}` **or** nested `{"error":"Access denied: path outside home directory"}` | **HOME-JAILED**: reads only under `$HOME`. Protocol-success ≠ op-success — check `result.error`. |
 | `mountPath` | ❓ | `{"hostPath":<str>, "mountName":<str>}` (research) | ❓ | bind a host dir into the sandbox |
 | `kill` | ❓ | `{"id":<str>}` (research) | ❓ | terminate a tracked process |
 | `writeStdin` | ❓ | `{"id":<str>, "data":<str>}` (research) | ❓ | pipe to a running process |
@@ -67,7 +67,7 @@ distinct from the request `id` (int) on the ack frame.
 | Date | CD version | What was confirmed/changed |
 |---|---|---|
 | 2026-06-25 | 1.11847.5-2.0.19 | First live probe (Sisyphus): framing real; `isRunning`/`isGuestConnected` ✅. `spawn` fire-and-ack; `subscribeEvents` required; stdout/exit event shapes captured ✅. |
-| 2026-06-25 | 1.11847.5-2.0.19 | `readFile` param form UNRESOLVED — `{path}`, `{paths:[]}`, and `[positional]` all return `paths[0] undefined`. Brute-force probe queued. |
+| 2026-06-25 | 1.11847.5-2.0.19 | `readFile` ✅ RESOLVED via brute-force: param is `{"filePath":<str>}`; the `paths[0]` error meant 'filePath missing'. readFile is home-jailed (access-denied nested in result for paths outside `$HOME`). |
 
 ---
 

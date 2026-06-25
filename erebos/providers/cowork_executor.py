@@ -82,9 +82,12 @@ class CoworkToolExecutor:
 
     def _read_file(self, args: dict) -> str:
         path = args.get("path") or args.get("file") or args.get("filename")
-        # daemon signature (host probe 2026-06-25): readFile takes a POSITIONAL paths
-        # array as its params payload (params IS the array, not {"paths": [...]}).
-        result = self._unwrap(self.client.call("readFile", [path]))
+        # daemon signature (host probe 2026-06-25): readFile({"filePath": <str>}).
+        # readFile is HOME-DIRECTORY JAILED — paths outside $HOME come back as a
+        # protocol-success with a nested {"error": "Access denied..."} in result.
+        result = self._unwrap(self.client.call("readFile", {"filePath": path}))
+        if isinstance(result, dict) and isinstance(result.get("error"), str):
+            raise CoworkProtocolError(f"readFile: {result['error']}")
         return self._extract_file_content(result, path)
 
     @staticmethod
