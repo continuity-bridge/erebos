@@ -3,7 +3,7 @@ title: "cowork-vm-service — Wire Protocol Reference (LIVING)"
 status: living
 last_confirmed: 2026-06-25
 confirmed_against_host: Sisyphus
-claude_desktop_version: "TBD — capture on next probe (see §Upstream)"
+claude_desktop_version: "1.11847.5-2.0.19"
 maintained_by: Vector (Dom1)
 note: >
   Source of truth for the ACTUAL daemon behavior, derived from live host probes
@@ -39,7 +39,7 @@ Legend: ✅ confirmed live · ⚠️ partial · ❓ from research, not yet probe
 | `isGuestConnected` | ✅ | `{}` | `{"connected": bool}` | health check |
 | `subscribeEvents` | ✅ | `{}` | `{}` (ack) | **must be sent before `spawn`** to receive its output events on this connection |
 | `spawn` | ✅ | object `{"id":<str>, "command":<str>, "args":[...], "cwd":<str>, "env":{...}}` | ack `{}` then **events** (see below) | fire-and-ack: stdout/exit arrive as events, NOT on this reply |
-| `readFile` | ⚠️ | **positional array** `["<path>", ...]` (NOT `{"paths":[...]}`) | ❓ not yet captured (only the error path seen) | handler indexes `paths[0]` on the params payload directly |
+| `readFile` | ❌ | **UNRESOLVED** — `{path}`, `{paths:[]}`, AND `[positional]` all rejected with `paths[0] undefined`. Param plumbing differs from spawn. Brute-force probe pending. | ❓ | handler validates `paths[0]` is a string |
 | `mountPath` | ❓ | `{"hostPath":<str>, "mountName":<str>}` (research) | ❓ | bind a host dir into the sandbox |
 | `kill` | ❓ | `{"id":<str>}` (research) | ❓ | terminate a tracked process |
 | `writeStdin` | ❓ | `{"id":<str>, "data":<str>}` (research) | ❓ | pipe to a running process |
@@ -66,7 +66,8 @@ distinct from the request `id` (int) on the ack frame.
 
 | Date | CD version | What was confirmed/changed |
 |---|---|---|
-| 2026-06-25 | TBD | First live probe (Sisyphus): framing real; `isRunning`/`isGuestConnected` ✅. `readFile` rejects `{"paths":[...]}` → param is positional. `spawn` is fire-and-ack; `subscribeEvents` required; stdout/exit event shapes captured. |
+| 2026-06-25 | 1.11847.5-2.0.19 | First live probe (Sisyphus): framing real; `isRunning`/`isGuestConnected` ✅. `spawn` fire-and-ack; `subscribeEvents` required; stdout/exit event shapes captured ✅. |
+| 2026-06-25 | 1.11847.5-2.0.19 | `readFile` param form UNRESOLVED — `{path}`, `{paths:[]}`, and `[positional]` all return `paths[0] undefined`. Brute-force probe queued. |
 
 ---
 

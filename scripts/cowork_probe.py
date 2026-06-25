@@ -50,7 +50,33 @@ def main():
             c2.connect()
             tf = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
             tf.write("erebos-probe-content"); tf.close()
-            print("readFile [positional] raw:", json.dumps(c2.call("readFile", [tf.name]), default=str))
+            # brute-force readFile param shapes against a guest file that definitely exists
+            target = "/etc/hostname"
+            forms = [
+                ("obj {path}",        {"path": target}),
+                ("obj {paths:[..]}",  {"paths": [target]}),
+                ("positional [path]", [target]),
+                ("bare string",       target),
+                ("obj {paths:str}",   {"paths": target}),
+                ("obj {filePath}",    {"filePath": target}),
+                ("obj {file}",        {"file": target}),
+                ("obj {filenames}",   {"filenames": [target]}),
+            ]
+            print(f"readFile param-form sweep (target={target}):")
+            for label, params in forms:
+                try:
+                    r = c2.call("readFile", params)
+                    ok = isinstance(r, dict) and r.get("success")
+                    print(f"   {'OK ' if ok else '   '}{label:20s} -> {json.dumps(r, default=str)[:160]}")
+                except Exception as e:
+                    print(f"      {label:20s} -> {type(e).__name__}: {e}")
+            # raw top-level form: paths as a sibling of method (not under params)
+            try:
+                c2._id += 1
+                c2._send({"method": "readFile", "paths": [target], "id": c2._id})
+                print("   raw top-level {paths} ->", json.dumps(c2._recv(), default=str)[:160])
+            except Exception as e:
+                print("   raw top-level {paths} ->", type(e).__name__, e)
             print("subscribeEvents raw:", json.dumps(c2.call("subscribeEvents", {}), default=str))
             print("spawn + events (subscribed):")
             try:
