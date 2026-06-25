@@ -48,7 +48,7 @@ class CoworkToolExecutor:
         if resp is None:
             raise CoworkProtocolError("no response from daemon")
         if not resp.get("success", False):
-            raise CoworkProtocolError(f"daemon error: {resp!r}")
+            raise CoworkProtocolError(resp.get("error") or f"daemon error: {resp!r}")
         return resp.get("result", {})
 
     # ---- public ------------------------------------------------------ #
@@ -82,38 +82,64 @@ class CoworkToolExecutor:
 
     def _read_file(self, args: dict) -> str:
         path = args.get("path") or args.get("file") or args.get("filename")
-        result = self._unwrap(self.client.call("readFile", {"path": path}))
-        # result shape assumed {"content": ...}; tolerate a bare string/other keys
+        # daemon signature (host probe 2026-06-25): readFile({"paths": [<str>, ...]})
+        result = self._unwrap(self.client.call("readFile", {"paths": [path]}))
+        return self._extract_file_content(result, path)
+
+    @staticmethod
+    def _extract_file_content(result, path) -> str:
+        # success result shape not yet pinned; handle the likely forms defensively
+        if isinstance(result, str):
+            return result
+        if isinstance(result, list):
+            return result[0] if result else ""
         if isinstance(result, dict):
-            return result.get("content") or result.get("data") or str(result)
-        return result
+            if path in result:
+                return result[path]
+            for k in ("content", "contents", "data", "text"):
+                if k in result:
+                    v = result[k]
+                    return v[0] if isinstance(v, list) and v else v
+            # single-entry map: {<path>: <content>}
+            if len(result) == 1:
+                return next(iter(result.values()))
+        return str(result)
 
     def _spawn(self, args: dict) -> str:
         command = args.get("command") or args.get("cmd")
+        proc_id = args.get("id", "erebos_spawn")
         params = {
+            "id": proc_id,
             "command": command,
             "args": args.get("args", []),
             "cwd": args.get("cwd", "/workspace"),
             "env": args.get("env", {"PATH": "/usr/bin:/bin"}),
         }
-        return self._collect_spawn(self.client.stream("spawn", params))
+        # spawn is fire-and-ack: you must subscribe BEFORE spawning, then read events.
+        self._unwrap(self.client.call("subscribeEvents", {}))
+        return self._collect_spawn(self.client.stream("spawn", params), proc_id)
 
     @staticmethod
-    def _collect_spawn(packets) -> str:
-        """Accumulate stdout/stderr from streamed packets until a terminal packet.
-        ASSUMED shapes (confirm on host): {"type":"stdout","data":...},
-        terminal = {"type":"exit"/"done"} or a packet carrying an exit code."""
+    def _collect_spawn(packets, proc_id=None) -> str:
+        """Read frames after spawn: skip the fire-and-ack reply, accumulate stdout/stderr
+        events for our process id, stop on exit. Event field names still ASSUMED pending
+        the --exec event probe; tolerate data|chunk|output and exit|exited|done|code."""
         out = []
         for pkt in packets:
             if not isinstance(pkt, dict):
                 continue
+            # the spawn ack: {"success":bool,"result":{...},"id":N} with no "type"
+            if "type" not in pkt and "success" in pkt:
+                if pkt.get("success") is False:
+                    raise CoworkProtocolError(pkt.get("error") or f"spawn rejected: {pkt!r}")
+                continue
+            if proc_id and pkt.get("id") not in (None, proc_id) and pkt.get("processId") not in (None, proc_id):
+                continue  # event for a different process
             ptype = pkt.get("type")
-            if ptype in ("stdout", "stderr"):
-                out.append(pkt.get("data", ""))
+            if ptype in ("stdout", "stderr", "data", "output"):
+                out.append(pkt.get("data") or pkt.get("chunk") or pkt.get("output") or "")
             elif ptype in ("exit", "exited", "done", "close") or "exitCode" in pkt or "code" in pkt:
                 break
-            elif pkt.get("success") is False:
-                raise CoworkProtocolError(f"spawn error: {pkt!r}")
         return "".join(out)
 
     # ---- mcp fallback ------------------------------------------------ #

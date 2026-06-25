@@ -80,9 +80,13 @@ def test_executor_read_file_unwraps_envelope():
     ex=CoworkToolExecutor(cl)
     assert ex.execute_tool("read_file", {"path":"/x"}) == "hello"
 
-def test_executor_spawn_collects_stdout_until_exit():
-    pkts=[{"type":"stdout","data":"a\n"},{"type":"stdout","data":"b\n"},{"type":"exit","code":0}]
-    ex=CoworkToolExecutor(_Client(stream_pkts=pkts))
+def test_executor_spawn_subscribes_then_collects_until_exit():
+    # spawn is fire-and-ack: subscribeEvents (call) returns ok, then the spawn stream
+    # yields the ack frame followed by stdout events and an exit.
+    ack={"success":True,"result":{},"id":1}
+    pkts=[{"success":True,"result":{},"id":2},  # spawn ack (skipped)
+          {"type":"stdout","data":"a\n"},{"type":"stdout","data":"b\n"},{"type":"exit","code":0}]
+    ex=CoworkToolExecutor(_Client(call_resp=ack, stream_pkts=pkts))
     assert ex.execute_tool("bash", {"command":"ls"}) == "a\nb\n"
 
 def test_executor_falls_back_to_mcp_on_cowork_error():
