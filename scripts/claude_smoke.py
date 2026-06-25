@@ -9,8 +9,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from erebos.providers.claude import ClaudeClient, KNOWN_MODELS
 
 def main():
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not key:
         print("set ANTHROPIC_API_KEY first"); return 1
+    # catch the classic "pasted the placeholder" slip before the SDK throws a 30-line
+    # header-encoding traceback
+    if not key.isascii():
+        print("ANTHROPIC_API_KEY contains non-ASCII chars — did you paste the literal "
+              "placeholder (e.g. the '…')? Use your real sk-ant-... key."); return 1
+    if not key.startswith("sk-ant-"):
+        print(f"warning: key doesn't start with 'sk-ant-' (got {key[:6]}...) — continuing anyway")
     model = sys.argv[1] if len(sys.argv) > 1 else "claude-haiku-4-5-20251001"
     print("known models:", KNOWN_MODELS)
     print("using:", model)
