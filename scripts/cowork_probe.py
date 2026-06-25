@@ -40,6 +40,29 @@ def main():
             print(f"  {m:18s} -> {type(e).__name__}: {e}")
     c.close()
 
+    # --exec: capture the REAL shapes of the exec methods (safe ops: echo + read a temp file)
+    if "--exec" in sys.argv:
+        import tempfile, json
+        print("\n--- exec shape probe (echo + readFile) ---")
+        c2 = CoworkSocketClient(timeout=6)
+        try:
+            c2.connect()
+            tf = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
+            tf.write("erebos-probe-content"); tf.close()
+            print("readFile raw:", json.dumps(c2.call("readFile", {"path": tf.name}), default=str))
+            print("spawn stream packets:")
+            for i, pkt in enumerate(c2.stream("spawn", {
+                "command": "echo", "args": ["erebos-probe"],
+                "cwd": "/tmp", "env": {"PATH": "/usr/bin:/bin"},
+            })):
+                print("  ", json.dumps(pkt, default=str))
+                if i > 12:  # safety cap so we never hang
+                    break
+        except Exception as e:
+            print("exec probe error:", type(e).__name__, e)
+        finally:
+            c2.close()
+
     print()
     if framed_ok:
         print("RESULT: framing is REAL — daemon returned length-prefixed JSON frames.")

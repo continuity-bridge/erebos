@@ -56,6 +56,29 @@ KNOWN_MODELS = [
 
 DEFAULT_MODEL     = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 8192
+
+# Minimal agent toolset exposed to the API for _run_agent(). The executor maps these
+# names onto cowork methods (bash->spawn, read_file->readFile) with MCP fallback.
+DEFAULT_AGENT_TOOLS = [
+    {
+        "name": "bash",
+        "description": "Run a shell command inside the sandbox and return its stdout.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"command": {"type": "string", "description": "The command to run."}},
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "read_file",
+        "description": "Read a file from the sandbox and return its contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "Absolute path to read."}},
+            "required": ["path"],
+        },
+    },
+]
 HEALTH_MAX_TOKENS  = 1      # minimal spend for health check
 
 
@@ -309,6 +332,69 @@ class ClaudeClient(ProviderClient):
     # ---------------------------------------------------------------------------
     # Error mapping
     # ---------------------------------------------------------------------------
+
+    def _run_agent(
+        self,
+        model: str,
+        messages: list[dict],
+        executor,
+        tools: Optional[list[dict]] = None,
+        max_turns: int = 8,
+    ) -> str:
+        """Agentic loop: call the API with tools, dispatch any tool_use blocks through
+        `executor.execute_tool(name, input)`, feed results back, repeat until the model
+        stops asking for tools. Returns the final assistant text.
+
+        `executor` is duck-typed (anything with execute_tool(name, args)->str), so the
+        provider stays decoupled from CoworkToolExecutor. Text-only chat stays in _chat.
+        """
+        tools = tools if tools is not None else DEFAULT_AGENT_TOOLS
+        system, convo = self._split_system(messages)
+        client = self._get_client()
+
+        for _turn in range(max_turns):
+            kwargs = dict(model=model, messages=convo, max_tokens=self.max_tokens, tools=tools)
+            if system:
+                kwargs["system"] = system
+            try:
+                resp = client.messages.create(**kwargs)
+            except APIStatusError as e:
+                self._raise_from_status(e, model)
+            except (APIConnectionError, APITimeoutError) as e:
+                raise ProviderConnectionError(
+                    f"Agent connection failed: {e}", provider=self.provider_name, model=model
+                ) from e
+
+            self._report_tokens(resp.usage.input_tokens, resp.usage.output_tokens)
+
+            tool_uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
+            if not tool_uses:
+                # no more tools requested -> final answer
+                return "".join(
+                    getattr(b, "text", "") for b in resp.content
+                    if getattr(b, "type", None) == "text"
+                )
+
+            # record the assistant turn (incl. its tool_use blocks) verbatim
+            convo.append({"role": "assistant", "content": resp.content})
+
+            # run each requested tool, collect tool_result blocks
+            results = []
+            for tu in tool_uses:
+                try:
+                    out = executor.execute_tool(tu.name, tu.input)
+                    results.append({"type": "tool_result", "tool_use_id": tu.id, "content": str(out)})
+                except Exception as e:  # tool failure is reported to the model, not fatal
+                    results.append({
+                        "type": "tool_result", "tool_use_id": tu.id,
+                        "content": f"tool error: {e}", "is_error": True,
+                    })
+            convo.append({"role": "user", "content": results})
+
+        raise ProviderResponseError(
+            f"agent exceeded max_turns ({max_turns}) without a final answer",
+            provider=self.provider_name, model=model,
+        )
 
     def _raise_from_status(self, e: APIStatusError, model: Optional[str] = None):
         """Map Anthropic HTTP status codes to ProviderError subclasses."""
