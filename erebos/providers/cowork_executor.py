@@ -82,8 +82,9 @@ class CoworkToolExecutor:
 
     def _read_file(self, args: dict) -> str:
         path = args.get("path") or args.get("file") or args.get("filename")
-        # daemon signature (host probe 2026-06-25): readFile({"paths": [<str>, ...]})
-        result = self._unwrap(self.client.call("readFile", {"paths": [path]}))
+        # daemon signature (host probe 2026-06-25): readFile takes a POSITIONAL paths
+        # array as its params payload (params IS the array, not {"paths": [...]}).
+        result = self._unwrap(self.client.call("readFile", [path]))
         return self._extract_file_content(result, path)
 
     @staticmethod
@@ -122,8 +123,9 @@ class CoworkToolExecutor:
     @staticmethod
     def _collect_spawn(packets, proc_id=None) -> str:
         """Read frames after spawn: skip the fire-and-ack reply, accumulate stdout/stderr
-        events for our process id, stop on exit. Event field names still ASSUMED pending
-        the --exec event probe; tolerate data|chunk|output and exit|exited|done|code."""
+        events for our process id, stop on exit. CONFIRMED shapes (host probe 2026-06-25):
+        stdout = {"type":"stdout","id":<proc>,"data":<str>}; exit = {"type":"exit",
+        "id":<proc>,"exitCode":N}. Extra tolerated forms kept harmless."""
         out = []
         for pkt in packets:
             if not isinstance(pkt, dict):
@@ -133,7 +135,8 @@ class CoworkToolExecutor:
                 if pkt.get("success") is False:
                     raise CoworkProtocolError(pkt.get("error") or f"spawn rejected: {pkt!r}")
                 continue
-            if proc_id and pkt.get("id") not in (None, proc_id) and pkt.get("processId") not in (None, proc_id):
+            ev_id = pkt.get("id", pkt.get("processId"))
+            if proc_id and ev_id is not None and ev_id != proc_id:
                 continue  # event for a different process
             ptype = pkt.get("type")
             if ptype in ("stdout", "stderr", "data", "output"):

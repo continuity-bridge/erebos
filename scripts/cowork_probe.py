@@ -50,7 +50,7 @@ def main():
             c2.connect()
             tf = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
             tf.write("erebos-probe-content"); tf.close()
-            print("readFile(paths) raw:", json.dumps(c2.call("readFile", {"paths": [tf.name]}), default=str))
+            print("readFile [positional] raw:", json.dumps(c2.call("readFile", [tf.name]), default=str))
             print("subscribeEvents raw:", json.dumps(c2.call("subscribeEvents", {}), default=str))
             print("spawn + events (subscribed):")
             try:

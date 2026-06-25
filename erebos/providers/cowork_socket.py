@@ -19,7 +19,7 @@ import json
 import os
 import socket
 import struct
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Union
 
 
 class CoworkProtocolError(RuntimeError):
@@ -84,17 +84,19 @@ class CoworkSocketClient:
         return json.loads(self._recv_exact(length).decode("utf-8"))
 
     # -- high-level ------------------------------------------------------- #
-    def call(self, method: str, params: Optional[dict] = None) -> Optional[dict]:
-        """One request -> one response. For non-streaming methods."""
+    def call(self, method: str, params: Union[dict, list, None] = None) -> Optional[dict]:
+        """One request -> one response. For non-streaming methods.
+        params may be an object (most methods) OR a positional array — readFile reads
+        its params payload AS the paths array (host-confirmed 2026-06-25)."""
         self._id += 1
-        self._send({"method": method, "params": params or {}, "id": self._id})
+        self._send({"method": method, "params": {} if params is None else params, "id": self._id})
         return self._recv()
 
-    def stream(self, method: str, params: Optional[dict] = None) -> Iterator[dict]:
+    def stream(self, method: str, params: Union[dict, list, None] = None) -> Iterator[dict]:
         """Send a request, then yield framed packets until the socket closes
         (for `spawn` + `subscribeEvents` style streaming stdout/stderr)."""
         self._id += 1
-        self._send({"method": method, "params": params or {}, "id": self._id})
+        self._send({"method": method, "params": {} if params is None else params, "id": self._id})
         while True:
             packet = self._recv()
             if packet is None:
