@@ -51,3 +51,31 @@ so it isn't re-litigated.
 
 *Not legal advice — operator's read + Vector's engineering/ethics read. Authority =
 Anthropic Commercial Terms + Usage Policy + operator's lawyer.*
+
+---
+
+## Addendum (2026-06-25) — supporting the normal allowed use, two modes
+
+Clarified with the operator: multiple sessions are for **domain separation** (distinct
+calibrated cognitive contexts — creative ≠ balance), NOT throughput multiplication. That
+is a legitimate organizational use. erebos should support BOTH of the following, and the
+boundary is simply **what erebos's role is**:
+
+- **Interactive mode (the normal allowed case).** A human uses the real Claude Desktop
+  app, one context per domain; erebos is the *workspace around it* — window management,
+  focus-shepherding, context switching (the Stoa Hubs / embed harness as a UI convenience).
+  erebos arranges the room; the human drives the conversation. No inference extraction,
+  no prompt injection. Fully inside the lines.
+- **API mode (programmatic).** Multiple API contexts under a Console org = the domain
+  mirrors, done programmatically. This is exactly what the API is for; run as many
+  distinct contexts as you like.
+
+**The one rule (stated positively):** a domain is EITHER interactive (real app, human
+drives, erebos orchestrates) OR programmatic (API nodule). The only thing to never do is
+**programmatically drive a *consumer* session** (real-app GUI doesn't launder automated
+inference extraction).
+
+Note: domain mirrors are *context* separation, not accounts. They do NOT require separate
+Anthropic accounts — N contexts/system-prompts on ONE account/runtime achieve it, which
+also removes the one-account-per-person soft spot. See substrate
+`FOUNDATION/proposals/PROP-domain-account-decoupling.md`.
