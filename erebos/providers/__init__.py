@@ -13,6 +13,7 @@ from .base import (
 )
 from .ollama import OllamaClient
 from .claude import ClaudeClient
+from .openai_compat import OpenAICompatClient
 
 __all__ = [
     "ProviderClient",
@@ -26,4 +27,5 @@ __all__ = [
     "ProviderCapabilityError",
     "OllamaClient",
     "ClaudeClient",
+    "OpenAICompatClient",
 ]
